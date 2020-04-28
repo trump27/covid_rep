@@ -11,9 +11,9 @@ output:
 
 ``政府、自治体の主な対策``
 
-- 3/25 東京都で不要不急の外出自粛要請
-- 4/7 ７都府県に「緊急事態宣言」
-- 4/16 「緊急事態宣言」全国拡大、「特定警戒」13都道府県
+- **3/25** 東京都で不要不急の外出自粛要請
+- **4/7** ７都府県に「緊急事態宣言」
+- **4/16** 「緊急事態宣言」全国拡大、「特定警戒」13都道府県
 
 ``利用データ``
 
@@ -130,6 +130,8 @@ guideLine <- function() {
 
 # 全国
 
+参考：厚生労働省 [新型コロナウイルス感染症に関する報道発表資料](https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000121431_00086.html)
+
 ```{r echo=FALSE }
 # print("直近の感染者数")
 # data %>% 
@@ -188,7 +190,8 @@ sumdata %>%
     labs(title="感染数と7日移動平均", y="感染者") +
     guideLine() +
     theme_bw() +
-    theme(legend.position = "top")
+    theme(legend.position = "top",
+          legend.text=element_text(size=12))
 ```
 
 
@@ -233,6 +236,8 @@ sumdata %>%
 ```
 
 ```{r echo=FALSE}
+# 各種指標
+
 sumdata %>%
   arrange(desc(確定日)) %>% 
   mutate(lagPCR = lead(PCR検査実施人数, n=1)) %>%
@@ -247,7 +252,8 @@ sumdata %>%
     labs(title="各種指標", y="指標値")+
     guideLine() +
     theme_bw() +
-    theme(legend.position = "top") 
+    theme(legend.position = "top",
+          legend.text=element_text(size=13)) 
 
 ```
 
@@ -317,10 +323,10 @@ data %>%
   ungroup() %>% 
   ggplot() +
   # ggplot(aes(x=確定日, y=移動平均7, color=受診都道府県)) +
-    geom_line(aes(x=確定日, y=移動平均7,color="1"),
-              color="red",alpha=.4) +
+    geom_line(aes(x=確定日, y=移動平均7),
+              color=cBlue,alpha=.4) +
     geom_point(aes(x=確定日, y=移動平均7), color=cBlue, size=1) +
-    geom_line(aes(x=確定日, y=人数, color="2"), color="grey") +
+    geom_line(aes(x=確定日, y=人数), color="grey") +
     scale_x_date(labels = date_format("%m/%d"))  +
     guideLine() +
     # scale_color_discrete(name = "Y series", labels = c("Y2", "Y1")) +
