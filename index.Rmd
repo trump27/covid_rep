@@ -68,7 +68,8 @@ tmp <- tmp %>% mutate(
 # 年代（因子）の並べ替え
 tmp$性別 <- ifelse(is.na(tmp$性別), "不明", tmp$性別)
 tmp$年代 <- ifelse(is.na(tmp$年代), "不明", tmp$年代)
-tmp$年代 <- fct_relevel(tmp$年代, "0-10","10","20","30","40","50","60","70","80","90","100")
+tmp$年代 <- fct_relevel(tmp$年代, "0-10","10","20","30",
+                      "40","50","60","70","80","90","100")
 
 # ステータスはあいまいなので使用しないこと
 data <- tmp %>% 
@@ -171,7 +172,7 @@ sumdata %>%
   geom_bar(stat="identity", fill=cBlue, width=0.7) +
   guideLine() +
   scale_x_date(labels = date_format("%m/%d"))+
-  labs(title="感染者数",y="感染者")
+  labs(title="感染者数", x="感染確定日", y="感染者")
 
 ```
 
@@ -189,7 +190,7 @@ sumdata %>%
     geom_point(size=1)+
     # geom_point(size=1)+
     scale_x_date(labels = date_format("%m/%d")) +
-    labs(title="感染数と7日移動平均", y="感染者") +
+    labs(title="感染数と7日移動平均", x="感染確定日", y="感染者") +
     guideLine() +
     theme_bw() +
     theme(legend.position = "top",
@@ -232,7 +233,7 @@ sumdata %>%
   geom_point(size=1,color=cBlue)+
   guideLine() +
   scale_x_date(labels = date_format("%m/%d"))+
-  labs(title="感染者累計")+
+  labs(title="感染者累計", x="感染確定日")+
   theme_bw()
   
 ```
@@ -251,7 +252,7 @@ sumdata %>%
     geom_line()+
     geom_point(size=1)+
     scale_x_date(labels = date_format("%m/%d"))+
-    labs(title="各種指標", y="指標値")+
+    labs(title="各種指標", x="日付", y="指標値")+
     guideLine() +
     theme_bw() +
     theme(legend.position = "top",
@@ -334,7 +335,7 @@ data %>%
     # scale_color_discrete(name = "Y series", labels = c("Y2", "Y1")) +
     # scale_colour_manual(values=c("red", "blue"))
     labs(title="東京都の感染者数と7日移動平均",
-         color="感染者数", y="感染数")+
+         color="感染者数", x="感染確定日", y="感染数")+
     theme_bw()
 ```
 
@@ -365,7 +366,7 @@ datatop %>%
     scale_x_date(labels = date_format("%m/%d")) +
     guideLine() +
     facet_wrap(vars(受診都道府県)) +
-    labs(title="感染者数")
+    labs(title="感染者数", x="感染確定日")
 ```
 
 ```{r echo=FALSE}
@@ -380,7 +381,7 @@ datatop %>%
     scale_x_date(labels = date_format("%m/%d")) +
     guideLine() +
     facet_wrap(vars(受診都道府県)) +
-    labs(title="7日移動平均")
+    labs(title="7日移動平均", x="感染確定日")
 ```
 
 
@@ -396,7 +397,7 @@ datatop %>%
     scale_x_date(labels = date_format("%m/%d")) +
     guideLine() +
     facet_wrap(vars(受診都道府県)) +
-    labs(title="感染者累計")
+    labs(title="感染者累計", x="感染確定日")
 ```
 
 
