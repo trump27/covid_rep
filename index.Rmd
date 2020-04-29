@@ -55,6 +55,8 @@ if (lchk=="") {
 }
 
 tmp <- COVID_19[,c(1,6,7,8,9,10,18,23)]
+# 空白行削除
+tmp <- tmp[!is.na(tmp$通し),]
 tmp$確定日 <- mdy(tmp$確定日)
 tmp$発症日 <- mdy(tmp$発症日)
 # 性別の整理
@@ -65,9 +67,9 @@ tmp <- tmp %>% mutate(
          性別=="男児" ~ "男性",
          TRUE ~ 性別
        ))
-# 年代（因子）の並べ替え
 tmp$性別 <- ifelse(is.na(tmp$性別), "不明", tmp$性別)
 tmp$年代 <- ifelse(is.na(tmp$年代), "不明", tmp$年代)
+# 年代（因子）の並べ替え
 tmp$年代 <- fct_relevel(tmp$年代, "0-10","10","20","30",
                       "40","50","60","70","80","90","100")
 
@@ -283,6 +285,7 @@ sumdata %>%
 
 \newpage
 ## 年代別感染数
+
 
 ```{r echo=FALSE}
 data %>% 
