@@ -67,6 +67,7 @@ tmp <- tmp %>% mutate(
          性別=="男児" ~ "男性",
          TRUE ~ 性別
        ))
+tmp$性別 <- str_trim(tmp$性別) # trim
 tmp$性別 <- ifelse(is.na(tmp$性別), "不明", tmp$性別)
 tmp$年代 <- ifelse(is.na(tmp$年代), "不明", tmp$年代)
 # 年代（因子）の並べ替え
@@ -255,8 +256,30 @@ sumdata %>%
     geom_point(size=1)+
     scale_x_date(labels = date_format("%m/%d"))+
     labs(title="各種指標", x="日付", y="指標値")+
-    guideLine() +
     theme_bw() +
+    guideLine() +
+    theme(legend.position = "top",
+          legend.text=element_text(size=13)) 
+
+```
+
+## 死者累計
+
+```{r echo=FALSE}
+sumdata %>%
+  arrange(desc(確定日)) %>% 
+  # mutate(死者累計lead = lead(死者累計, n=1)) %>%
+  # mutate(死者累計 = 死者累計 - 死者累計lead) %>%
+  select("確定日", "死者累計","感染数","発症数") %>% 
+  pivot_longer(c("死者累計"),
+               names_to="指標", values_to="値") %>% 
+  ggplot(aes(確定日, 値, color=指標)) +
+    geom_line()+
+    geom_point(size=1)+
+    scale_x_date(labels = date_format("%m/%d"))+
+    labs(title="死者累計", x="日付", y="指標値")+
+    theme_bw() +
+    guideLine() +
     theme(legend.position = "top",
           legend.text=element_text(size=13)) 
 
@@ -441,8 +464,8 @@ data %>%
   ungroup() %>% 
   ggplot(aes(x=reorder(受診都道府県,人数), y=人数))+
   geom_bar(stat="identity", fill=cBlue)+
-  geom_text(aes(label = 人数), hjust=-.5,color="blue",size=3)+
-  scale_y_continuous(limits = c(0, max_pref$max +170))+
+  geom_text(aes(label = 人数), hjust=-.2,color="blue",size=3)+
+  scale_y_continuous(limits = c(0, max_pref$max +190))+
   labs(title="地域別感染数", x="受診都道府県") +
   theme_bw() +
   coord_flip()
