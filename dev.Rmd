@@ -23,6 +23,10 @@ output:
 データの種類： CSV  
 アドレス： https://jag-japan.com/covid19map-readme/  
 
+The 2019 Novel Coronavirus COVID-19 (2019-nCoV) Data Repository by the Center for Systems Science and Engineering (CSSE), ``Johns Hopkins University``.  
+https://github.com/CSSEGISandData/COVID-19/
+
+
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -30,8 +34,11 @@ library(lubridate)
 library(scales)
 library(RcppRoll) # roll_mean
 library(DT)
-# install.packages("ggrepel")
-# library(ggrepel)
+
+# world reports
+library(gridExtra)
+library(gghighlight)
+
 
 # color
 cBlue <- "#1E90FF"
@@ -508,6 +515,218 @@ data %>%
   coord_flip()
 
 ```
+
+# 【参考】Coronavirus cases Worldwide
+
+using the 2019 Novel Coronavirus COVID-19 (2019-nCoV) Data Repository by the Center for Systems Science and Engineering (CSSE), ``Johns Hopkins University``.
+
+
+```{r echo=FALSE}
+filenames <- c('time_series_covid19_confirmed_global.csv',
+                'time_series_covid19_deaths_global.csv',
+                'time_series_covid19_recovered_global.csv')
+url.path <- paste0('https://raw.githubusercontent.com/CSSEGISandData/COVID-19/',
+                    'master/csse_covid_19_data/csse_covid_19_time_series/')
+## download files to local
+download <- function(filename) {
+  url <- file.path(url.path, filename)
+  dest <- file.path('./', filename)
+  download.file(url, dest)
+}
+# download
+# bin <- lapply(filenames, download)
+
+raw.data.confirmed <- read.csv(filenames[1])
+raw.data.deaths <- read.csv(filenames[2])
+raw.data.recovered <- read.csv(filenames[3])
+
+# dim(raw.data.confirmed)
+```
+
+
+```{r echo=FALSE}
+cleanData <- function(data) {
+  ## remove some columns
+  data <-
+    data %>% select(-c(Province.State, Lat, Long)) %>%
+    rename(country = Country.Region) %>%
+    ## convert from wide to long format
+    gather(key = date, value = count, -country) %>%
+    ## convert from character to date
+    mutate(date = date %>% substr(2, 8) %>% mdy()) %>%
+    ## aggregate by country
+    group_by(country, date) %>% 
+    summarise(count = sum(count,na.rm =T)) %>%
+    as.data.frame()
+  return(data)
+}
+
+## clean the three datasets
+data.confirmed <- raw.data.confirmed %>% cleanData() %>% rename(confirmed=count)
+data.deaths <- raw.data.deaths %>% cleanData() %>% rename(deaths=count)
+data.recovered <- raw.data.recovered %>% cleanData() %>% rename(recovered=count)
+
+data <- data.confirmed %>% merge(data.deaths, all=T) %>% merge(data.recovered, all=T)
+
+# data %>% filter(country=="China") %>% head(10)
+# data %>% filter(country=="Japan") # %>% head(10)
+
+# 日別の数値
+day1 <- min(data$date)
+data <- data %>%  mutate(
+  new.confirmed = ifelse(date == day1, NA, confirmed - lag(confirmed, n=1)),
+  new.deaths = ifelse(date == day1, NA, deaths - lag(deaths, n=1)),
+  new.recovered = ifelse(date == day1, NA, recovered - lag(recovered, n=1))
+)
+## change negative number of new cases to zero
+data <- data %>% mutate(
+  new.confirmed = ifelse(new.confirmed < 0, 0, new.confirmed),
+  new.deaths = ifelse(new.deaths < 0, 0, new.deaths),
+  new.recovered = ifelse(new.recovered < 0, 0, new.recovered)
+)
+
+rm(raw.data.confirmed, raw.data.deaths, raw.data.recovered)
+rm(data.confirmed, data.deaths, data.recovered)
+```
+
+```{r echo=FALSE}
+data %>% 
+  filter(date>="2020-03-01") %>% 
+  group_by(date) %>% 
+  summarise(confirmed = sum(confirmed, na.rm=T),
+        deaths = sum(deaths, na.rm=T),
+        recovered = sum(recovered, na.rm=T),
+        new.confirmed = sum(new.confirmed, na.rm=T),
+        new.deaths = sum(new.deaths, na.rm=T)
+        ) %>% 
+  rename(日付=date,感染累計=confirmed,死者累計=deaths,
+           退院累計=recovered,感染者=new.confirmed,死者数=new.deaths) %>% 
+  arrange(desc(日付))
+```
+
+```{r echo=FALSE,fig.width=8,fig.height=5}
+p1 <- data %>% 
+  group_by(date) %>% 
+  summarise(country='World',
+        confirmed = sum(confirmed, na.rm=T),
+        deaths = sum(deaths, na.rm=T),
+        recovered = sum(recovered, na.rm=T)) %>% 
+  ggplot(aes(x=date,y=confirmed/10000)) +
+  geom_line(color=cBlue) +
+  labs(title="感染数", x="", y="感染数（万人）") +
+  scale_x_date(labels = date_format("%B")) 
+
+
+p2 <- data %>% 
+  group_by(date) %>% 
+  summarise(country='World',
+        confirmed = sum(confirmed, na.rm=T),
+        deaths = sum(deaths, na.rm=T),
+        recovered = sum(recovered, na.rm=T)) %>% 
+  ggplot(aes(x=date,y=deaths/10000)) +
+  geom_line(color=cRed) +
+  scale_x_date(labels = date_format("%B")) +
+  labs(title="死者数", x="", y="死者数（万人）")
+grid.arrange(p1, p2, ncol=2)
+
+data %>% 
+  group_by(date) %>% 
+  summarise(country='World',
+        confirmed = sum(confirmed, na.rm=T),
+        deaths = sum(deaths, na.rm=T),
+        recovered = sum(recovered, na.rm=T)) %>% 
+  ggplot(aes(x=date,y=deaths/confirmed*100)) +
+  geom_line(color=cRed) +
+  scale_x_date(labels = date_format("%B")) +
+  labs(title="死亡率", x="", y="死亡率（%）") +
+  theme_bw()
+```
+
+
+```{r echo=FALSE}
+top_n <- data %>% 
+  group_by(country) %>% 
+  summarise(confirmed=max(confirmed)) %>%
+  # mutate(confirmed=max(confirmed)) %>% 
+  ungroup() %>% 
+  arrange(desc(confirmed)) %>% 
+  head(15) %>% 
+  pull(1)
+# print(top_n)
+# top_n <- as.character(t(top_n[,1]))
+top_n <- append(top_n,"Japan")
+```
+
+## 感染上位１５ヵ国と日本
+
+```{r echo=FALSE}
+data %>% 
+  filter(date==max(date), country %in% top_n) %>%
+  rename(日付=date,感染累計=confirmed,死者累計=deaths,
+           退院累計=recovered,感染者=new.confirmed,死者数=new.deaths) %>% 
+  select(-new.recovered) %>% 
+  arrange(desc(感染累計))
+```
+
+## US感染状況
+
+```{r echo=FALSE, fig.height=5, fig.width=8}
+p1 <- data %>% 
+  filter(country %in% "US") %>% 
+  ggplot(aes(x=date,y=confirmed/10000,color=country)) +
+    geom_line() +
+    gghighlight(label_key=country) +
+    labs(title="US 感染数", x=" ", y="感染数（万人）") +
+    scale_x_date(labels = date_format("%B")) +
+    theme_bw()
+
+p2 <- data %>% 
+  filter(country == "US") %>%
+  ggplot(aes(x=date,y=deaths,color=country)) +
+    geom_line() +
+    gghighlight(label_key=country) +
+    labs(title="US 死者数", x=" ", y="死者数") +
+    scale_x_date(labels = date_format("%B")) +
+    theme_bw()
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+
+
+## 感染状況 上位１５ヵ国と日本（US除く）
+
+```{r echo=FALSE, fig.height=5, fig.width=7}
+data %>% 
+  filter(country %in% top_n) %>% 
+  filter(country != "US") %>% 
+  group_by(country, date) %>% 
+  # summarise(confirmed = sum(confirmed, na.rm=T),
+  #       deaths = sum(deaths, na.rm=T),
+  #       recovered = sum(recovered, na.rm=T)) %>% 
+  ggplot(aes(x=date,y=confirmed/10000,color=country)) +
+    geom_line() +
+    gghighlight(label_key=country) +
+    labs(title="感染数 Top15", x=" ", y="感染数（万人）") +
+    scale_x_date(labels = date_format("%B")) +
+    theme_bw()
+
+data %>% 
+  filter(country %in% top_n, date>="2020-03-01") %>% 
+  filter(country != "US") %>%
+  group_by(country, date) %>% 
+  # summarise(confirmed = sum(confirmed, na.rm=T),
+  #       deaths = sum(deaths, na.rm=T),
+  #       recovered = sum(recovered, na.rm=T)) %>% 
+  ggplot(aes(x=date,y=deaths,color=country)) +
+    geom_line() +
+    gghighlight(label_key=country) +
+    labs(title="死者数", x=" ", y="死者数") +
+    scale_x_date(labels = date_format("%B")) +
+    theme_bw()
+
+```
+
 
 --  
 k.k
