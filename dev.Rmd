@@ -1,0 +1,513 @@
+---
+title: "COVID-19 in Japan"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+---
+
+作成日：`r as.POSIXlt(Sys.time(), tz="Asia/Tokyo")` (JST)
+
+
+``政府、自治体の主な対策``
+
+- **3/25** 東京都で不要不急の外出自粛要請
+- **4/7** ７都府県に「緊急事態宣言」
+- **4/16** 「緊急事態宣言」全国拡大、「特定警戒」13都道府県
+- **5/14** 39県で「緊急事態宣言」解除
+
+``利用データ``
+
+ジャッグジャパン株式会社  
+データの権利： 非営利 4.0 国際 (CC BY-NC 4.0)  
+データの種類： CSV  
+アドレス： https://jag-japan.com/covid19map-readme/  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+# library(ggrepel)
+library(scales)
+library(RcppRoll) # roll_mean
+library(DT)
+# install.packages("ggrepel")
+# library(ggrepel)
+
+# color
+cBlue <- "#1E90FF"
+cRed <- "#FF7F24"
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+invisible(Sys.setlocale(category = "LC_ALL", locale = "C"))
+COVID_19 <- read_csv("COVID-19.csv")
+
+# invisible(Sys.setlocale(category = "LC_ALL", locale = "JA"))
+lchk <- Sys.setlocale("LC_ALL", 'ja_JP.UTF-8')
+# windowsの場合
+if (lchk=="") {
+  # windows
+  invisible(Sys.setlocale(category = "LC_ALL", locale = "JA"))
+} else {
+  # linux
+  theme_set(theme_bw(base_family = "IPAPGothic"))
+}
+
+# NA行削除
+COVID_19 <- COVID_19[!is.na(COVID_19$通し),]
+# データ不備修正
+# 5/9の累計・前日比・発症数がダブり
+COVID_19[15645, 24:26] = 0
+
+
+tmp <- COVID_19[,c(1,6,7,8,9,10,18,23)]
+# 空白行削除
+tmp <- tmp[!is.na(tmp$通し),]
+tmp$確定日 <- mdy(tmp$確定日)
+tmp$発症日 <- mdy(tmp$発症日)
+# 性別の整理
+tmp <- tmp %>% mutate(
+       性別 = case_when(
+         性別=="男" ~ "男性",
+         性別=="女" ~ "女性",
+         性別=="男児" ~ "男性",
+         TRUE ~ 性別
+       ))
+tmp$性別 <- str_trim(tmp$性別) # trim
+tmp$性別 <- ifelse(is.na(tmp$性別), "不明", tmp$性別)
+tmp$年代 <- ifelse(is.na(tmp$年代), "不明", tmp$年代)
+# 年代（因子）の並べ替え
+tmp$年代 <- fct_relevel(tmp$年代, "0-10","10","20","30",
+                      "40","50","60","70","80","90","100")
+
+# ステータスはあいまいなので使用しないこと
+data <- tmp %>% 
+  mutate(
+    ステータス=
+      case_when(str_detect(ステータス,"^死亡") ~ "死亡",
+                ステータス=="退院" ~ "退院")
+  )
+
+# summary用
+# sumdata <- COVID_19 %>% 
+#   filter(!is.na(死者合計), !is.na(累計)) %>% 
+#   select(c(8, 24:30)) %>% 
+#   mutate(確定日=mdy(確定日)) %>% 
+#   rename(感染累計=累計,感染数=前日比,死者累計=死者合計) %>%
+#   mutate("7日移動平均"=round(
+#     roll_mean(感染数, n=7, fill=NA, ,align="right"))) %>% 
+#   mutate(死者数=死者累計 - lag(死者累計, n=1))
+
+sumdata <- COVID_19 %>% 
+  # filter(!is.na(死者合計), !is.na(累計)) %>% 
+  mutate(確定日=mdy(確定日)) %>% 
+  select(c(8, 24:30)) %>% 
+  group_by(確定日) %>% 
+  summarise_all(funs(sum), na.rm=T) %>% 
+  ungroup() %>% 
+  rename(感染累計=累計,感染数=前日比,死者累計=死者合計) %>%
+  mutate("7日移動平均"=round(
+    roll_mean(感染数, n=7, fill=NA, ,align="right"))) %>% 
+  mutate(死者数=死者累計 - lag(死者累計, n=1),
+            死者数 = ifelse(死者数<0,0,死者数))
+
+# 最新日データが未確定の場合NA
+lastrec <- sumdata[sumdata$確定日==max(sumdata$確定日),]
+if (lastrec$死者累計 == 0) {
+  sumdata[sumdata$確定日==max(sumdata$確定日), 4:10] <- NA
+}
+# write.csv(sumdata, "tmp.csv")
+
+rm(COVID_19, tmp)
+```
+
+
+```{r echo=FALSE}
+
+# top-nデータ生成
+
+# 都道府県名抽出
+top_count <- 10
+tmp <- data %>% 
+  group_by(受診都道府県) %>% 
+  summarise(人数=n()) %>%
+  top_n(top_count, wt=人数) %>% 
+  ungroup()
+  # select(受診都道府県)
+top_prefs_name <- as.character(t(tmp[,1]))
+
+datatop <- data %>% 
+  filter(受診都道府県 %in% top_prefs_name) %>%
+  group_by(受診都道府県,確定日) %>% 
+  summarise(人数=sum(人数)) %>% 
+  mutate(累計=cumsum(人数)) %>% 
+  mutate(移動平均7=roll_mean(人数,n=7,fill=0,,align="right")) %>%
+  ungroup() %>% 
+  pivot_longer(cols=c(3:5), names_to="指標", values_to="感染者数")
+rm(tmp)
+
+# (共通)イベント日のガイドライン
+guideLine <- function() {
+  lineColor <- "red"
+  list(
+    geom_vline(xintercept=as.numeric(as.Date("2020-03-25")),
+               linetype=2, color=lineColor),
+    geom_vline(xintercept=as.numeric(as.Date("2020-04-07")),
+               linetype=2, color=lineColor),
+    geom_vline(xintercept=as.numeric(as.Date("2020-04-16")),
+               linetype=2, color=lineColor)
+  )
+}
+```
+
+
+# 全国
+
+参考：厚生労働省 [新型コロナウイルス感染症に関する報道発表資料](https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000121431_00086.html)
+
+```{r echo=FALSE }
+# print("直近の感染者数")
+# data %>% 
+#   group_by(確定日) %>% 
+#   summarise(感染者数=n()) %>% 
+#   mutate(累計=cumsum(感染者数)) %>% 
+#   ungroup() %>% 
+#   arrange(desc(確定日)) %>% 
+#   head()
+sumdata %>% 
+  arrange(desc(確定日)) %>% 
+  select(-"7日移動平均") %>% 
+  datatable(sumdata, rownames=FALSE, class="compact")
+```
+
+\newpage
+## 感染推移
+
+```{r echo=FALSE}
+# data %>% 
+#   filter(確定日>"2020-02-10") %>% 
+#   group_by(確定日) %>% 
+#   summarise(人数=n()) %>% 
+#   ungroup() %>% 
+#   ggplot(aes(確定日, 人数))+
+#   # geom_line(color="blue")+
+#   # geom_point(size=1, color="blue")+
+#   geom_bar(stat="identity", fill="blue",width=0.7) +
+#   scale_x_date(labels = date_format("%m/%d"))+
+#   labs(title="感染者数",y="感染者")
+sumdata %>% 
+  ggplot(aes(確定日, 感染数))+
+  # geom_line(color="blue")+
+  # geom_point(size=1, color="blue")+
+  geom_bar(stat="identity", fill=cBlue, width=0.7) +
+  guideLine() +
+  scale_x_date(labels = date_format("%m/%d"))+
+  labs(title="感染者数", x="感染確定日", y="感染者")
+
+```
+
+\newpage
+## 感染数と7日移動平均
+
+```{r echo=FALSE, warning=FALSE}
+sumdata %>% 
+  select(確定日, 感染数, "7日移動平均") %>%
+  # arrange(確定日) %>% 
+  pivot_longer(c("感染数", "7日移動平均"),
+               names_to="指標", values_to="値") %>% 
+  ggplot(aes(x=確定日, y=値, color=指標)) +
+    geom_line() +
+    geom_point(size=1)+
+    # geom_point(size=1)+
+    scale_x_date(labels = date_format("%m/%d")) +
+    labs(title="感染数と7日移動平均", x="感染確定日", y="感染者") +
+    guideLine() +
+    theme_bw() +
+    theme(legend.position = "top",
+          legend.text=element_text(size=12))
+```
+
+
+
+```{r echo=FALSE, warning=FALSE}
+# data %>% 
+#   # filter(受診都道府県=="東京都") %>% 
+#   group_by(確定日) %>% 
+#   summarise(人数=n()) %>% 
+#   ungroup() %>% 
+#   ggplot(aes(確定日, 人数))+
+#   geom_line(color="red")+
+#   geom_point(size=1, color="red")+
+#   geom_smooth(method = lm, formula = y ~ splines::bs(x, 4)) +
+#   scale_x_date(labels = date_format("%m/%d"))+
+#   labs(title="感染者数と近似曲線",y="感染者")
+
+# sumdata %>% 
+#   ggplot(aes(確定日, 感染数))+
+#   geom_line(color=cRed)+
+#   geom_point(size=1, color=cRed)+
+#   geom_smooth(method = lm, formula = y ~ splines::bs(x, 4)) +
+#   scale_x_date(labels = date_format("%m/%d"))+
+#   labs(title="感染者数と近似曲線",y="感染者")
+  
+```
+
+\newpage
+## 感染累計
+
+```{r echo=FALSE, warning=FALSE}
+
+sumdata %>% 
+  ggplot(aes(確定日, 感染累計))+
+  geom_line(color=cBlue)+
+  geom_point(size=1,color=cBlue)+
+  guideLine() +
+  scale_x_date(labels = date_format("%m/%d"))+
+  labs(title="感染者累計", x="感染確定日")+
+  theme_bw()
+  
+```
+
+```{r echo=FALSE, warning=FALSE}
+# 各種指標
+
+sumdata %>%
+  arrange(desc(確定日)) %>% 
+  mutate(lagPCR = lead(PCR検査実施人数, n=1)) %>%
+  mutate(PCR検査 = PCR検査実施人数 - lagPCR) %>%
+  select("確定日","感染数","発症数", "退院数", "PCR検査") %>% 
+  pivot_longer(c("感染数", "発症数", "退院数"),
+               names_to="指標", values_to="値") %>% 
+  ggplot(aes(確定日, 値, color=指標)) +
+    geom_line()+
+    geom_point(size=1)+
+    scale_x_date(labels = date_format("%m/%d"))+
+    labs(title="各種指標", x="日付", y="指標値")+
+    theme_bw() +
+    guideLine() +
+    theme(legend.position = "top",
+          legend.text=element_text(size=13)) 
+
+```
+
+## 死者数
+
+```{r echo=FALSE, warning=FALSE}
+
+# sumdata %>%
+#   arrange(desc(確定日)) %>% 
+#   select("確定日", "死者累計","感染数","発症数") %>% 
+#   pivot_longer(c("死者累計"),
+#                names_to="指標", values_to="値") %>% 
+#   ggplot(aes(確定日, 値, color=指標)) +
+#     geom_line()+
+#     geom_point(size=1)+
+#     scale_x_date(labels = date_format("%m/%d"))+
+#     labs(title="死者累計", x="日付", y="指標値")+
+#     theme_bw() +
+#     guideLine() +
+#     theme(legend.position = "top",
+#           legend.text=element_text(size=13)) 
+
+sumdata %>%
+  select("確定日", "死者数") %>% 
+  ggplot(aes(確定日, 死者数)) +
+    geom_bar(stat="identity", fill=cBlue, width=0.7) +
+    scale_x_date(labels = date_format("%m/%d"))+
+    labs(title="死者数", x="", y="死者数")+
+    theme_bw() +
+    guideLine()
+
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+## 移動平均
+
+# sumdata %>% 
+#   select(確定日,感染数) %>% 
+#   # arrange(確定日) %>% 
+#   # group_by(確定日) %>%
+#   # 日付の降順のためalign=leftを指定すること
+#   mutate(移動平均7=roll_mean(感染数, n=7,
+#                         fill=NA, align="left")) %>% 
+#   drop_na(移動平均7) %>% 
+#   ungroup() %>% 
+#   ggplot(aes(x=確定日, y=移動平均7))+
+#     geom_line(color=cBlue) +
+#     geom_point(size=1, color=cBlue) +
+#     scale_x_date(labels = date_format("%m/%d")) +
+#     labs(title="感染者数の7日移動平均")+
+#     theme_bw()
+```
+
+\newpage
+## 年代別感染数
+
+
+```{r echo=FALSE}
+data %>% 
+  # filter(感染確定日>"2020-03-22") %>%
+  ggplot(aes(x=年代,fill=性別)) +
+    geom_bar(position = "stack") +
+    geom_text(stat='count', aes(label=..count..),
+              position = position_stack(vjust=0.5),size=3) +
+    labs(title="年代別感染者", y="感染者数")+
+    theme_bw()+
+    theme(legend.position = "top")
+```
+
+\newpage
+# 感染上位１０都道府県
+
+## 東京都
+
+```{r echo=FALSE }
+# print("東京都の直近感染者数")
+data %>%
+  filter(受診都道府県=="東京都") %>% 
+  group_by(確定日) %>% 
+  summarise(感染者数=n()) %>% 
+  mutate(累計=cumsum(感染者数)) %>% 
+  ungroup() %>% 
+  arrange(desc(確定日)) %>% 
+  datatable(rownames=FALSE, class="compact",
+            caption="東京都の直近感染者数")
+  
+```
+
+```{r echo=FALSE}
+data %>% 
+  filter(受診都道府県 == "東京都") %>%
+  filter(確定日>"2020-02-10") %>% 
+  group_by(受診都道府県,確定日) %>% 
+  summarise(人数=n()) %>% 
+  mutate(累計=cumsum(人数)) %>% 
+  mutate(移動平均7=roll_mean(人数,n=7,fill=0,,align="right")) %>%
+  ungroup() %>% 
+  ggplot() +
+  # ggplot(aes(x=確定日, y=移動平均7, color=受診都道府県)) +
+    geom_line(aes(x=確定日, y=移動平均7),
+              color=cBlue,alpha=.4) +
+    geom_point(aes(x=確定日, y=移動平均7), color=cBlue, size=1) +
+    geom_line(aes(x=確定日, y=人数), color="grey") +
+    scale_x_date(labels = date_format("%m/%d"))  +
+    guideLine() +
+    # scale_color_discrete(name = "Y series", labels = c("Y2", "Y1")) +
+    # scale_colour_manual(values=c("red", "blue"))
+    labs(title="東京都の感染者数と7日移動平均",
+         color="感染者数", x="感染確定日", y="感染数")+
+    theme_bw()
+```
+
+```{r echo=FALSE}
+data %>% 
+  # filter(感染確定日>"2020-03-22") %>%
+  filter(受診都道府県=="東京都") %>% 
+  ggplot(aes(x=年代,fill=性別)) +
+    geom_bar(position = "stack") +
+    geom_text(stat='count', aes(label=..count..),
+              position = position_stack(vjust=0.5),size=3) +
+    theme_bw() +
+    labs(title="東京の年代別感染者", y="感染者数")
+```
+
+\newpage
+## 東京都を除く上位都道府県
+
+```{r echo=FALSE}
+datatop %>% 
+  # filter(指標!="累計") %>%
+  filter(受診都道府県!="東京都") %>% 
+  filter(指標=="人数") %>%
+  filter(確定日>"2020-02-10") %>% 
+  ggplot(aes(x=確定日, y=感染者数)) +
+    geom_line(color=cRed) +
+    # geom_point(size=1, color=cRed) +
+    scale_x_date(labels = date_format("%m/%d")) +
+    guideLine() +
+    facet_wrap(vars(受診都道府県)) +
+    labs(title="感染者数", x="感染確定日")
+```
+
+```{r echo=FALSE}
+datatop %>% 
+  # filter(指標!="累計") %>%
+  filter(受診都道府県!="東京都") %>% 
+  filter(指標=="移動平均7") %>%
+  filter(確定日>"2020-02-10") %>% 
+  ggplot(aes(x=確定日, y=感染者数)) +
+    geom_line(color=cBlue) +
+    # geom_point(size=1) +
+    scale_x_date(labels = date_format("%m/%d")) +
+    guideLine() +
+    facet_wrap(vars(受診都道府県)) +
+    labs(title="7日移動平均", x="感染確定日")
+```
+
+
+```{r echo=FALSE}
+datatop %>% 
+  # filter(指標!="累計") %>%
+  filter(受診都道府県!="東京都") %>% 
+  filter(指標=="累計") %>%
+  filter(確定日>"2020-02-10") %>% 
+  ggplot(aes(x=確定日, y=感染者数)) +
+    geom_line(color=cRed) +
+    # geom_point(size=1) +
+    scale_x_date(labels = date_format("%m/%d")) +
+    guideLine() +
+    facet_wrap(vars(受診都道府県)) +
+    labs(title="感染者累計", x="感染確定日")
+```
+
+
+```{r echo=FALSE}
+# data %>% 
+#   filter(受診都道府県 %in% top_pref_name) %>%
+#   filter(受診都道府県 != "東京都") %>%
+#   filter(確定日>"2020-02-10") %>% 
+#   group_by(受診都道府県,確定日) %>% 
+#   summarise(人数=sum(人数)) %>% 
+#   mutate(累計=cumsum(人数)) %>% 
+#   mutate(移動平均7=roll_mean(人数,n=7,fill=0,,align="right")) %>%
+#   ungroup() %>% 
+#   ggplot(aes(x=確定日, y=移動平均7, color=受診都道府県)) +
+#     geom_line() +
+#     scale_x_date(labels = date_format("%m/%d")) +
+#     facet_wrap(vars(受診都道府県))
+#     # facet_wrap(vars(受診都道府県), scales = "free")
+  
+```
+
+
+\newpage
+# 地域別感染数
+
+```{r echo=FALSE, fig.height=10, fig.width=6}
+
+# 都道府県で最大の累積感染数(余白計算のため)
+max_pref <- data %>% 
+  group_by(受診都道府県) %>% 
+  summarise(max=sum(人数, na.rm=T)) %>% 
+  top_n(1, wt=max) %>% 
+  ungroup()
+
+data %>% 
+  group_by(受診都道府県) %>% 
+  summarise(人数=n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x=reorder(受診都道府県,人数), y=人数))+
+  geom_bar(stat="identity", fill=cBlue)+
+  geom_text(aes(label = 人数), hjust=-.2,color="blue",size=3)+
+  scale_y_continuous(limits = c(0, max_pref$max +190))+
+  labs(title="地域別感染数", x="受診都道府県") +
+  theme_bw() +
+  coord_flip()
+
+```
+
+--  
+k.k
