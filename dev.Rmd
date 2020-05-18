@@ -516,7 +516,7 @@ data %>%
 
 ```
 
-# 【参考】Coronavirus cases Worldwide
+# 【参考】The coronavirus cases worldwide
 
 using the 2019 Novel Coronavirus COVID-19 (2019-nCoV) Data Repository by the Center for Systems Science and Engineering (CSSE), ``Johns Hopkins University``.
 
