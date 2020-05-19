@@ -654,7 +654,7 @@ top_n <- data %>%
   pull(1)
 # print(top_n)
 # top_n <- as.character(t(top_n[,1]))
-top_n <- append(top_n,"Japan")
+top_n <- append(as.character(top_n), c("Japan"))
 ```
 
 ## 感染上位１５ヵ国と日本
