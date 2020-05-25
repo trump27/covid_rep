@@ -88,6 +88,7 @@ tmp <- tmp %>% mutate(
        ))
 tmp$性別 <- str_trim(tmp$性別) # trim
 tmp$性別 <- ifelse(is.na(tmp$性別), "不明", tmp$性別)
+tmp$年代 <- gsub("代", "", tmp$年代)
 tmp$年代 <- ifelse(is.na(tmp$年代), "不明", tmp$年代)
 # 年代（因子）の並べ替え
 tmp$年代 <- fct_relevel(tmp$年代, "0-10","10","20","30",
