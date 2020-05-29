@@ -28,6 +28,10 @@ https://github.com/CSSEGISandData/COVID-19/
 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+knitr::opts_chunk$set(fig.width = 7, fig.height = 5,
+                      dev = "png", dpi = 96)
+
 library(tidyverse)
 library(lubridate)
 # library(ggrepel)
