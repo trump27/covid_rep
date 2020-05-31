@@ -383,6 +383,29 @@ data %>%
 ```
 
 \newpage
+# 宣言解除後
+
+```{r echo=FALSE}
+lifted <- "2020-05-25"
+
+data %>% 
+  filter(確定日>=lifted) %>% 
+  group_by(確定日, 受診都道府県) %>% 
+  summarise(人数=n()) %>% 
+  # arrange(desc(確定日)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x=確定日, y=人数,color=受診都道府県)) +
+    geom_line() +
+    gghighlight(label_key=受診都道府県) +
+    labs(title=paste(lifted,"以降"), x=" ", y="感染数") +
+    # scale_x_date(labels = date_format("%B")) +
+    scale_x_date(labels = date_format("%m/%d"))+
+    theme_bw()
+
+```
+
+
+\newpage
 # 感染上位１０都道府県
 
 ## 東京都
@@ -672,6 +695,7 @@ top_n <- data %>%
 # top_n <- as.character(t(top_n[,1]))
 top_n <- append(as.character(top_n), c("Japan"))
 ```
+
 
 ## 感染上位１５ヵ国と日本
 
