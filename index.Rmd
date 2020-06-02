@@ -59,6 +59,9 @@ library(gghighlight)
 cBlue <- "#1E90FF"
 cRed <- "#FF7F24"
 
+# summariseのwarning抑止 v1.0
+# https://www.tidyverse.org/blog/2020/05/dplyr-1-0-0-last-minute-additions/
+options(dplyr.summarise.inform = FALSE)
 ```
 
 
@@ -397,7 +400,7 @@ data %>%
   ggplot(aes(x=確定日, y=人数,color=受診都道府県)) +
     geom_line() +
     gghighlight(label_key=受診都道府県) +
-    labs(title="宣言解除補", x=" ", y="感染数") +
+    labs(title="宣言解除後", x="", y="感染数") +
     # scale_x_date(labels = date_format("%B")) +
     scale_x_date(labels = date_format("%m/%d")) +
     theme_bw()

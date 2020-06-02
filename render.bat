@@ -7,8 +7,8 @@ curl -OL https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_c
 
 setlocal enabledelayedexpansion
 cd /d %~dp0
-set rpath=C:\Program Files\R\R-3.6.2\bin
-rem set rpath=C:\Program Files\R\R-4.0.0\bin
+rem set rpath=C:\Program Files\R\R-3.6.2\bin
+set rpath=C:\Program Files\R\R-4.0.0\bin
 set logile=render.log
 
 set inputFile=index.Rmd
